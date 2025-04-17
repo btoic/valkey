@@ -18,11 +18,11 @@ FROM scratch
 
 ARG TARGETARCH
 
-LABEL maintainer="Opstree Solutions"
+LABEL maintainer="Branko Toic"
 
 LABEL vesrion=1.0 \
       arch=$TARGETARCH \
-      description="A production grade redis exporter docker image created by Opstree Solutions"
+      description="A production grade redis exporter docker image"
 
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /tmp/redis_exporter/redis_exporter /usr/local/bin/redis_exporter

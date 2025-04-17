@@ -1,39 +1,6 @@
-FROM alpine:3.19 as builder
+FROM valkey/valkey:7.2.8-alpine
 
-LABEL maintainer="Opstree Solutions"
-
-ARG TARGETARCH
-
-LABEL version=1.0 \
-      arch=$TARGETARCH \
-      description="A production grade performance tuned redis docker image created by Opstree Solutions"
-
-ARG REDIS_VERSION="stable"
-
-RUN apk add --no-cache su-exec tzdata make curl build-base linux-headers bash openssl-dev
-
-WORKDIR /tmp
-
-RUN VERSION=$(echo ${REDIS_VERSION} | sed -e "s/^v//g"); \
-    case "${VERSION}" in \
-       latest | stable) REDIS_DOWNLOAD_URL="http://download.redis.io/redis-stable.tar.gz" && VERSION="stable";; \
-       *) REDIS_DOWNLOAD_URL="http://download.redis.io/releases/redis-${VERSION}.tar.gz";; \
-    esac; \
-    curl -fL -Lo redis-${VERSION}.tar.gz ${REDIS_DOWNLOAD_URL}; \
-    tar xvzf redis-${VERSION}.tar.gz; \
-    \
-    arch="$(uname -m)"; \
-    extraJemallocConfigureFlags="--with-lg-page=16"; \
-    if [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then \
-        sed -ri 's!cd jemalloc && ./configure !&'"$extraJemallocConfigureFlags"' !' /tmp/redis-${VERSION}/deps/Makefile; \
-    fi; \
-    export BUILD_TLS=yes; \
-    make -C redis-${VERSION} all; \
-    make -C redis-${VERSION} install
-
-FROM alpine:3.19
-
-LABEL maintainer="Opstree Solutions"
+LABEL maintainer="Branko Toic"
 
 ARG TARGETARCH
 
@@ -41,10 +8,7 @@ ENV REDIS_PORT=6379
 
 LABEL version=1.0 \
       arch=$TARGETARCH \
-      description="A production grade performance tuned redis docker image created by Opstree Solutions"
-
-COPY --from=builder /usr/local/bin/redis-server /usr/local/bin/redis-server
-COPY --from=builder /usr/local/bin/redis-cli /usr/local/bin/redis-cli
+      description="A production grade performance tuned valkey docker image for opstree redis-operator"
 
 RUN apk update && apk upgrade
 
