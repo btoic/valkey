@@ -1,5 +1,8 @@
-<p align="left">
-  <img src="./img/redis.png">
+# valkey
+Valkey image variant for running with opstree redis-operator. Based of https://github.com/OT-CONTAINER-KIT/redis
+
+
+<img src="./img/redis.png">
 </p>
 
 # Ot-Container-Kit (Redis)

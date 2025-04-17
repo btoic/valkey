@@ -10,10 +10,7 @@ LABEL version=1.0 \
       arch=$TARGETARCH \
       description="A production grade performance tuned valkey docker image for opstree redis-operator"
 
-RUN apk update && apk upgrade
-
-RUN addgroup -S -g 1000 redis && adduser -S -G redis -u 1000 redis && \
-    apk add --no-cache bash
+RUN apk update && apk upgrade && apk add --no-cache bash
 
 COPY redis.conf /etc/redis/redis.conf
 
@@ -25,10 +22,10 @@ COPY healthcheck.sh /usr/bin/healthcheck.sh
 
 RUN chown -R 1000:0 /etc/redis && \
     chmod -R g+rw /etc/redis && \
-    mkdir /data && \
+    mkdir -p /data && \
     chown -R 1000:0 /data && \
     chmod -R g+rw /data && \
-    mkdir /node-conf && \
+    mkdir -p /node-conf && \
     chown -R 1000:0 /node-conf && \
     chmod -R g+rw /node-conf && \
     chmod -R g+rw /var/run

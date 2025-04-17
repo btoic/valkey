@@ -1,11 +1,11 @@
 CONTAINER_ENGINE ?= docker
-REDIS_VERSION ?= v7.0.13
-REDIS_SENTINEL_VERSION ?= v7.0.13
-REDIS_EXPORTER_VERSION ?= v1.61.0
+REDIS_VERSION ?= v7.2.8
+REDIS_SENTINEL_VERSION ?= v7.2.8
+REDIS_EXPORTER_VERSION ?= v1.48.0
 
-IMG ?= quay.io/opstree/redis:$(REDIS_VERSION)
-EXPORTER_IMG ?= quay.io/opstree/redis-exporter:$(REDIS_EXPORTER_VERSION)
-SENTINEL_IMG ?= quay.io/opstree/redis-sentinel:$(REDIS_SENTINEL_VERSION)
+IMG ?= ghcr.io/btoic/valkey:$(REDIS_VERSION)
+EXPORTER_IMG ?= ghcr.io/btoic/redis-exporter:$(REDIS_EXPORTER_VERSION)
+SENTINEL_IMG ?= ghcr.io/btoic/valkey-sentinel:$(REDIS_SENTINEL_VERSION)
 
 build-redis:
 	${CONTAINER_ENGINE} build -t ${IMG} -f Dockerfile --build-arg REDIS_VERSION=${REDIS_VERSION} .
