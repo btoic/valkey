@@ -136,23 +136,49 @@ external_config() {
 start_redis() {
     if [[ "${SETUP_MODE}" == "cluster" ]]; then
         echo "Starting redis service in cluster mode....."
+
         if [[ "${NODEPORT}" == "true" ]]; then
             CLUSTER_ANNOUNCE_IP_VAR="HOST_IP"
             CLUSTER_ANNOUNCE_IP="${!CLUSTER_ANNOUNCE_IP_VAR}"
         else
             CLUSTER_ANNOUNCE_IP="${POD_IP}"
         fi
-        
-        if [[ "${REDIS_MAJOR_VERSION}" != "v7" ]]; then
-          exec redis-server /etc/redis/redis.conf \
-          --cluster-announce-ip "${CLUSTER_ANNOUNCE_IP}"
-        else
-          {
-            echo cluster-announce-ip "${CLUSTER_ANNOUNCE_IP}"
-            echo cluster-announce-hostname "${POD_HOSTNAME}"
-          } >> /etc/redis/redis.conf
 
-          exec redis-server /etc/redis/redis.conf
+        # Detect if running inside Kubernetes
+        # this should fix the problem when running TLS mode and accessing it from
+        # external namespaces
+
+        if [[ -f /var/run/secrets/kubernetes.io/serviceaccount/token ]]; then
+            echo "Kubernetes environment detected."
+
+            # Get namespace from service account
+            POD_NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+
+            # Derive base name from pod hostname by stripping trailing -<index>
+            BASE_NAME=$(echo "${POD_HOSTNAME}" | sed -E 's/-[0-9]+$//')
+            HEADLESS_SERVICE="${BASE_NAME}-headless"
+
+            # Build full hostname for cluster announcement
+            CLUSTER_ANNOUNCE_HOSTNAME="${POD_HOSTNAME}.${HEADLESS_SERVICE}.${POD_NAMESPACE}.svc.cluster.local"
+
+            echo "Derived cluster-announce-hostname: ${CLUSTER_ANNOUNCE_HOSTNAME}"
+            echo "Using cluster-announce-ip: ${CLUSTER_ANNOUNCE_IP}"
+        else
+            echo "Non-Kubernetes environment detected — falling back to default hostname."
+            CLUSTER_ANNOUNCE_HOSTNAME="${POD_HOSTNAME}"
+        fi
+
+        if [[ "${REDIS_MAJOR_VERSION}" != "v7" ]]; then
+            exec redis-server /etc/redis/redis.conf \
+                --cluster-announce-ip "${CLUSTER_ANNOUNCE_IP}" \
+                --cluster-announce-hostname "${CLUSTER_ANNOUNCE_HOSTNAME}"
+        else
+            {
+                echo cluster-announce-ip "${CLUSTER_ANNOUNCE_IP}"
+                echo cluster-announce-hostname "${CLUSTER_ANNOUNCE_HOSTNAME}"
+            } >> /etc/redis/redis.conf
+
+            exec redis-server /etc/redis/redis.conf
         fi
 
     else
