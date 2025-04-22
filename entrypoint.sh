@@ -2,6 +2,10 @@
 
 set -a
 
+if [[ "${ENTRYPOINT_DEBUG}" == "true" ]]; then
+    set -x
+fi
+
 PERSISTENCE_ENABLED=${PERSISTENCE_ENABLED:-"false"}
 DATA_DIR=${DATA_DIR:-"/data"}
 NODE_CONF_DIR=${NODE_CONF_DIR:-"/node-conf"}
@@ -133,7 +137,60 @@ external_config() {
     echo "include ${EXTERNAL_CONFIG_FILE}" >> /etc/redis/redis.conf
 }
 
+_term() {
+    if [[ "${SETUP_MODE}" == "cluster" ]]; then
+        REDIS_HOSTNAME=$(hostname)
+        CMD="redis-cli -h ${REDIS_HOSTNAME} -p ${REDIS_PORT}"
+
+        # Conditionally add password
+        if [[ -n "$REDIS_PASSWORD" ]]; then
+            CMD+=" -a ${REDIS_PASSWORD}"
+        fi
+
+        # Conditionally add TLS options
+        if [[ "$TLS_MODE" == "true" ]]; then
+            CMD+=" --tls --cert ${REDIS_TLS_CERT} --key ${REDIS_TLS_CERT_KEY} --cacert ${REDIS_TLS_CA_KEY}"
+        fi
+
+        REPLICATION_INFO="${CMD} info replication"
+        ROLE=$(eval "$REPLICATION_INFO" | awk -F: '/role:master/ {print "master"}')
+
+        if [ "$ROLE" = "master" ]; then
+            BEST_SLAVE=$(eval "$REPLICATION_INFO" | awk -F: '
+                BEGIN { maxOffset = -1; bestSlave = "" }
+                /slave[0-9]+:ip/ {
+                    split($2, a, ",");
+                    split(a[1], ip_arr, "=");
+                    split(a[4], offset_arr, "=");
+                    ip = ip_arr[2];
+                    offset = offset_arr[2] + 0;
+                    if (offset > maxOffset) {
+                        maxOffset = offset;
+                        bestSlave = ip;
+                    }
+                }
+                END { print bestSlave }
+            ')
+
+            if [ -n "$BEST_SLAVE" ]; then
+                REDIS_HOSTNAME=${BEST_SLAVE}
+                FAILOVER="${CMD} cluster failover"
+                "$FAILOVER"
+            fi
+        fi
+        sleep 5
+        kill -TERM "$child" 2>/dev/null
+        wait "$child"
+    else
+        # Not running in cluster mode
+        kill -TERM "$child" 2>/dev/null
+        wait "$child"
+    fi
+}
+
 start_redis() {
+    trap "echo Receiving sigterm and exiting.; exit" SIGTERM
+
     if [[ "${SETUP_MODE}" == "cluster" ]]; then
         echo "Starting redis service in cluster mode....."
 
@@ -169,22 +226,28 @@ start_redis() {
         fi
 
         if [[ "${REDIS_MAJOR_VERSION}" != "v7" ]]; then
-            exec redis-server /etc/redis/redis.conf \
+            redis-server /etc/redis/redis.conf \
                 --cluster-announce-ip "${CLUSTER_ANNOUNCE_IP}" \
-                --cluster-announce-hostname "${CLUSTER_ANNOUNCE_HOSTNAME}"
+                --cluster-announce-hostname "${CLUSTER_ANNOUNCE_HOSTNAME}" &
+            child=$!
         else
             {
                 echo cluster-announce-ip "${CLUSTER_ANNOUNCE_IP}"
                 echo cluster-announce-hostname "${CLUSTER_ANNOUNCE_HOSTNAME}"
             } >> /etc/redis/redis.conf
 
-            exec redis-server /etc/redis/redis.conf
+            redis-server /etc/redis/redis.conf &
+            child=$!
         fi
 
     else
         echo "Starting redis service in standalone mode....."
-        exec redis-server /etc/redis/redis.conf
+        redis-server /etc/redis/redis.conf &
+        child=$!
     fi
+
+    trap _term SIGTERM
+    wait "$child"
 }
 
 main_function() {
